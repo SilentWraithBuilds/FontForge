@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FontForge Studio — draw your own typeface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..650;1,9..144,400..650&family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<style>
+  :root{
+    --paper:#F2EEE4; --panel:#FAF8F1; --card:#FFFDF7;
+    --ink:#242019; --ink2:#6E6656; --faint:#A79D84;
+    --line:#E3DCCA; --line2:#CFC5AC;
+    --accent:#C24A22; --accent-dk:#A53D19;
+    --ok:#3E7A4E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:'Archivo',sans-serif;background:var(--paper);color:var(--ink);
+    height:100dvh;overflow:hidden;font-size:14px;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:rgba(194,74,34,.22)}
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  input{font:inherit;color:inherit}
+  svg.ic{width:16px;height:16px;flex:none}
+  .kbd{font-size:10.5px;border:1px solid var(--line2);border-bottom-width:2px;border-radius:4px;
+    padding:1px 5px;background:var(--card);color:var(--ink2)}
+
+  /* ---------- top bar ---------- */
+  header{
+    height:62px;display:flex;align-items:center;gap:18px;padding:0 18px;
+    background:var(--panel);border-bottom:1px solid var(--line);
+  }
+  .brand{display:flex;align-items:center;gap:9px;user-select:none}
+  .brand svg{width:21px;height:21px;color:var(--accent)}
+  .brand .wm{font-family:'Fraunces',serif;font-weight:600;font-size:19px;letter-spacing:-.01em}
+  .brand .wm em{font-style:italic;font-weight:450;color:var(--accent)}
+  .brand .st{font-size:9.5px;font-weight:600;letter-spacing:.22em;color:var(--faint);margin-left:2px;transform:translateY(1px)}
+  .namewrap{display:flex;align-items:baseline;gap:9px;min-width:0}
+  .namewrap label{font-size:9.5px;font-weight:600;letter-spacing:.18em;color:var(--faint)}
+  #fontName{
+    background:transparent;border:none;outline:none;min-width:60px;max-width:220px;width:170px;
+    font-family:'Fraunces',serif;font-style:italic;font-weight:500;font-size:16.5px;color:var(--ink);
+    border-bottom:1px dashed transparent;padding:2px 1px;
+  }
+  #fontName:hover{border-bottom-color:var(--line2)}
+  #fontName:focus{border-bottom-color:var(--accent)}
+  .spacer{flex:1}
+  .actions{display:flex;align-items:center;gap:8px}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 12px;border-radius:9px;
+    border:1px solid var(--line2);background:var(--card);font-size:13px;font-weight:500;color:var(--ink);
+    transition:border-color .15s, background .15s, transform .1s;white-space:nowrap;
+  }
+  .btn:hover{border-color:var(--faint);background:#fff}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.38;pointer-events:none}
+  .btn.primary{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .btn.primary:hover{background:#000}
+  .btn.primary.complete{background:var(--accent);border-color:var(--accent)}
+  .btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.accent:hover{background:var(--accent-dk);border-color:var(--accent-dk)}
+  .btn.icon{width:34px;padding:0;justify-content:center}
+  .progress-chip{display:flex;align-items:center;gap:8px;padding:0 6px;font-size:12px;
+    font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink2)}
+  .progress-chip svg{display:block}
+
+  /* ---------- main layout ---------- */
+  main{
+    height:calc(100dvh - 63px);display:grid;
+    grid-template-columns:298px minmax(0,1fr) 338px;
+    grid-template-areas:"chars stage side";
+  }
+  .panel-head{
+    display:flex;align-items:baseline;justify-content:space-between;
+    padding:16px 16px 10px;font-size:10.5px;font-weight:700;letter-spacing:.16em;color:var(--ink2);
+  }
+  .panel-head span{font-weight:600;letter-spacing:0;font-variant-numeric:tabular-nums;color:var(--faint)}
+
+  /* characters panel */
+  .panel-chars{grid-area:chars;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0}
+  .progress-bar{height:3px;background:var(--line);margin:0 16px;border-radius:2px;overflow:hidden}
+  .progress-bar i{display:block;height:100%;width:0;background:var(--accent);border-radius:2px;transition:width .45s cubic-bezier(.2,.8,.2,1)}
+  .char-scroll{flex:1;overflow-y:auto;padding:14px 14px 20px}
+  .char-scroll h5{font-size:10px;font-weight:700;letter-spacing:.15em;color:var(--faint);margin:14px 4px 8px}
+  .char-scroll h5:first-child{margin-top:2px}
+  .cgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+  .cell{
+    aspect-ratio:1;border-radius:9px;border:1px solid var(--line);background:var(--card);
+    position:relative;display:grid;place-items:center;transition:transform .12s,border-color .15s,box-shadow .15s;
+    user-select:none;
+  }
+  .cell:hover{transform:translateY(-1px);border-color:var(--faint);box-shadow:0 3px 8px -3px rgba(60,45,15,.18)}
+  .cell .ref{font-weight:500;font-size:15px;color:var(--faint)}
+  .cell canvas{position:absolute;inset:13%;width:74%;height:74%;display:none;pointer-events:none}
+  .cell.done .ref{display:none}
+  .cell.done canvas{display:block}
+  .cell.done{border-color:var(--line2)}
+  .cell.done::after{content:"";position:absolute;right:5px;bottom:5px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+  .cell.active{border-color:var(--accent);box-shadow:0 0 0 1.5px var(--accent)}
+  .space-note{font-size:11px;color:var(--faint);margin:16px 4px 0;line-height:1.5}
+
+  /* stage */
+  .stage{grid-area:stage;display:flex;flex-direction:column;min-width:0;min-height:0}
+  .stage-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px 8px}
+  .glyph-indicator{display:flex;align-items:center;gap:13px;min-width:0}
+  .glyph-card{
+    width:54px;height:54px;border:1px solid var(--line2);border-radius:11px;background:var(--card);
+    display:grid;place-items:center;font-weight:600;font-size:25px;flex:none;
+  }
+  .glyph-card.done{border-color:var(--accent);color:var(--accent)}
+  .gi-text strong{display:block;font-size:14.5px;font-weight:650;letter-spacing:.01em}
+  .gi-text span{font-size:12px;color:var(--ink2)}
+  .glyph-nav{display:flex;gap:8px}
+  #btnNext b{font-weight:700;font-size:14px}
+
+  .canvas-wrap{flex:1;min-height:0;position:relative;display:grid;place-items:center;padding:8px 26px 14px}
+  #pad{
+    display:block;background:var(--card);border:1px solid var(--line);border-radius:16px;
+    box-shadow:0 24px 48px -30px rgba(70,50,15,.35),0 2px 6px rgba(70,50,15,.06);
+    touch-action:none;cursor:crosshair;
+  }
+  #hint{
+    position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+    background:rgba(36,32,25,.86);color:#F2EEE4;font-size:12px;padding:7px 14px;border-radius:99px;
+    pointer-events:none;transition:opacity .4s;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis;
+  }
+  #hint.off{opacity:0}
+
+  .toolbar{display:flex;align-items:center;gap:8px;padding:4px 24px 16px;flex-wrap:wrap;user-select:none}
+  .tb-sep{width:1px;height:20px;background:var(--line2);margin:0 4px}
+  .tgl{height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line2);background:var(--card);
+    font-size:12.5px;font-weight:500;color:var(--ink2);transition:all .15s}
+  .tgl:hover{border-color:var(--faint)}
+  .tgl.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+  .slider-mini{display:flex;align-items:center;gap:8px}
+  .slider-mini label{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--faint)}
+  .slider-mini input{width:120px}
+  #strokeInfo{margin-left:auto;font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+
+  /* right panel */
+  .panel-side{grid-area:side;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;min-height:0}
+  .side-sec{padding:16px 18px 18px;border-bottom:1px solid var(--line)}
+  .side-sec h5{font-size:10.5px;font-weight:700;letter-spacing:.16em;color:var(--ink2);margin-bottom:13px}
+  .ctl{margin-bottom:14px}
+  .ctl:last-child{margin-bottom:0}
+  .ctl-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px}
+  .ctl-row label{font-size:12.5px;font-weight:500}
+  .ctl-row output{font-size:12px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums}
+  .ctl small{display:block;font-size:11px;color:var(--faint);margin-top:2px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--line2)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--card);border:2px solid var(--ink);margin-top:-6px;transition:transform .1s}
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.15)}
+  input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:var(--line2)}
+  input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--card);border:2px solid var(--ink)}
+
+  #previewText{
+    width:100%;padding:9px 11px;border:1px solid var(--line2);border-radius:9px;background:var(--card);
+    font-size:13px;outline:none;transition:border-color .15s, box-shadow .15s;
+  }
+  #previewText:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,74,34,.12)}
+  .chips{display:flex;gap:6px;margin-top:8px}
+  .chip{font-size:11px;font-weight:500;color:var(--ink2);border:1px solid var(--line);border-radius:99px;
+    padding:4px 10px;background:var(--card);transition:all .15s}
+  .chip:hover{border-color:var(--faint);color:var(--ink)}
+  #previewOut{
+    margin-top:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:15px 17px;min-height:98px;font-size:34px;line-height:1.28;overflow-wrap:break-word;
+    font-family:'FFStudioCustom','Fraunces',Georgia,serif;
+  }
+  #previewOut:empty::before{content:"Your lettering appears here…";font-family:'Archivo';font-size:13px;color:var(--faint)}
+  .psize{display:flex;align-items:center;gap:9px;margin-top:11px}
+  .psize label{font-size:10.5px;font-weight:600;letter-spacing:.1em;color:var(--faint)}
+  .live-status{display:flex;align-items:center;gap:7px;margin-top:11px;font-size:11.5px;color:var(--ink2)}
+  .live-status .dot{width:7px;height:7px;border-radius:50%;background:var(--line2);flex:none}
+  .live-status .dot.live{background:var(--ok)}
+  .live-status .dot.busy{background:var(--accent);animation:pulse 1s infinite}
+  .live-status .dot.err{background:#B03A2E}
+  @keyframes pulse{50%{opacity:.3}}
+  .shortcuts{display:grid;gap:8px;font-size:12px;color:var(--ink2)}
+  .shortcuts div{display:flex;justify-content:space-between;align-items:center;gap:10px}
+  .shortcuts span:last-of-type{display:flex;gap:4px}
+
+  /* toasts */
+  #toasts{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;
+    gap:8px;z-index:60;align-items:center;pointer-events:none}
+  .toast{
+    display:flex;align-items:center;gap:9px;background:var(--ink);color:var(--paper);
+    font-size:13px;padding:10px 16px;border-radius:11px;box-shadow:0 10px 30px -10px rgba(0,0,0,.4);
+    opacity:0;transform:translateY(8px);transition:all .3s cubic-bezier(.2,.8,.2,1);max-width:min(480px,90vw);
+  }
+  .toast.in{opacity:1;transform:none}
+  .toast.out{opacity:0;transform:translateY(6px)}
+  .toast .tic{width:15px;height:15px;flex:none;color:var(--accent)}
+  .toast.ok .tic{color:#8FCB9B}
+  .toast.warn .tic{color:#E8B04B}
+
+  /* modal */
+  .modal-back{position:fixed;inset:0;background:rgba(40,32,18,.44);backdrop-filter:blur(2px);
+    display:grid;place-items:center;z-index:50;animation:fadein .2s}
+  @keyframes fadein{from{opacity:0}}
+  .modal{background:var(--panel);border-radius:18px;padding:28px 28px 24px;width:min(460px,92vw);
+    box-shadow:0 40px 80px -30px rgba(30,20,5,.5);animation:pop .28s cubic-bezier(.2,.9,.3,1.2)}
+  @keyframes pop{from{opacity:0;transform:scale(.94) translateY(8px)}}
+  .modal h3{font-family:'Fraunces',serif;font-weight:600;font-size:23px;letter-spacing:-.01em;margin-bottom:10px}
+  .modal p{font-size:13.5px;line-height:1.6;color:var(--ink2);margin-bottom:16px}
+  .modal label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.15em;color:var(--faint);margin-bottom:6px}
+  .modal input{
+    width:100%;padding:11px 13px;border:1px solid var(--line2);border-radius:10px;background:var(--card);
+    font-family:'Fraunces',serif;font-style:italic;font-size:16px;outline:none;
+  }
+  .modal input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(194,74,34,.12)}
+  .modal .m-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+  .modal .fineprint{font-size:11px;color:var(--faint);margin:14px 0 0}
+
+  *{scrollbar-width:thin;scrollbar-color:var(--line2) transparent}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:var(--line2);border-radius:5px;border:2px solid var(--panel)}
+  ::-webkit-scrollbar-track{background:transparent}
+
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:1280px){ main{grid-template-columns:264px minmax(0,1fr) 312px} }
+  @media (max-width:1120px){
+    main{grid-template-columns:minmax(0,1fr) 318px;grid-template-rows:minmax(0,1fr) 262px;
+      grid-template-areas:"stage stage" "chars side"}
+    .panel-chars{border-right:1px solid var(--line);border-top:1px solid var(--line)}
+    .panel-side{border-left:none;border-top:1px solid var(--line)}
+  }
+  @media (max-width:780px){
+    body{overflow:auto;height:auto}
+    header{flex-wrap:wrap;height:auto;padding:10px 14px;row-gap:10px}
+    main{display:flex;flex-direction:column;height:auto}
+    .stage{order:1}.panel-side{order:2}.panel-chars{order:3}
+    .btn span{display:none}
+    .btn{padding:0 10px}
+    .canvas-wrap{height:min(94vw,470px);flex:none;padding:8px 14px 12px}
+    .stage-head,.toolbar{padding-left:16px;padding-right:16px}
+    .char-scroll{overflow:visible}
+    .panel-chars,.panel-side{border-left:none;border-right:none;border-top:1px solid var(--line)}
+    #fontName{width:130px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.2 18 8.2l-2.55 10.3a1.25 1.25 0 0 1-2.03.63L12 18l-1.42 1.13a1.25 1.25 0 0 1-2.03-.63L6 8.2 12 2.2Z"/>
+      <circle cx="12" cy="9.6" r="1.7" fill="#FAF8F1"/>
+      <path d="M12 11.3v3.9" stroke="#FAF8F1" stroke-width="1.3" stroke-linecap="round"/>
+    </svg>
+    <span class="wm">FontForge <em>Studio</em></span>
+  </div>
+  <div class="namewrap">
+    <label for="fontName">TYPEFACE</label>
+    <input id="fontName" spellcheck="false" autocomplete="off" aria-label="Font name">
+  </div>
+  <div class="spacer"></div>
+  <div class="actions">
+    <button class="btn" id="btnNew" title="Start a new font"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>
+    <button class="btn" id="btnImport" title="Import a project file (.json)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21V9"/><path d="m6 13 6-6 6 6"/><path d="M5 3h14"/></svg><span>Import</span></button>
+    <button class="btn" id="btnExport" title="Export project for later editing"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m6 11 6 6 6-6"/><path d="M5 21h14"/></svg><span>Export</span></button>
+    <div class="progress-chip" title="Progress">
+      <svg width="26" height="26" viewBox="0 0 26 26">
+        <circle cx="13" cy="13" r="10.5" fill="none" stroke="var(--line)" stroke-width="3"/>
+        <circle id="ringFill" cx="13" cy="13" r="10.5" fill="none" stroke="var(--accent)" stroke-width="3"
+          stroke-linecap="round" stroke-dasharray="65.97" stroke-dashoffset="65.97" transform="rotate(-90 13 13)"
+          style="transition:stroke-dashoffset .5s cubic-bezier(.2,.8,.2,1)"/>
+      </svg>
+      <span id="progressLabel">0 / 84</span>
+    </div>
+    <button class="btn primary" id="btnDownload" title="Compile & download .TTF"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 9.5 5 5 5-5"/><path d="M5 20h14"/></svg><span>Download .TTF</span></button>
+  </div>
+</header>
+
+<main>
+  <!-- character set -->
+  <aside class="panel-chars">
+    <div class="panel-head">CHARACTERS <span id="charCount"></span></div>
+    <div class="progress-bar"><i id="progressBarFill"></i></div>
+    <div class="char-scroll">
+      <div id="charGrid"></div>
+      <p class="space-note">The word space is generated automatically. Drawn characters get an ink thumbnail; the rest keep their dashed reference.</p>
+    </div>
+  </aside>
+
+  <!-- writing stage -->
+  <section class="stage">
+    <div class="stage-head">
+      <div class="glyph-indicator">
+        <div class="glyph-card" id="glyphCard">A</div>
+        <div class="gi-text">
+          <strong id="glyphSet">Uppercase</strong>
+          <span id="glyphState">Not started</span>
+        </div>
+      </div>
+      <div class="glyph-nav">
+        <button class="btn icon" id="btnPrev" title="Previous character (←)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 6-6 6 6 6"/></svg></button>
+        <button class="btn accent" id="btnNext" title="Next character (→)">Next&nbsp;·&nbsp;<b id="nextChar">B</b><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m10 6 6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="pad"></canvas>
+      <div id="hint">Draw over the ghost guide, or freehand it — slow strokes run thicker.</div>
+    </div>
+    <div class="toolbar">
+      <button class="btn icon" id="btnUndo" title="Undo (Ctrl+Z)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H9"/></svg></button>
+      <button class="btn icon" id="btnRedo" title="Redo (Ctrl+Y)"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H15"/></svg></button>
+      <div class="tb-sep"></div>
+      <button class="btn icon" id="btnClear" title="Clear this character"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="m6.5 7 .8 12a1 1 0 0 0 1 .9h7.4a1 1 0 0 0 1-.9l.8-12"/><path d="M10 11v5M14 11v5"/></svg></button>
+      <div class="tb-sep"></div>
+      <button class="tgl on" id="tglGhost">Ghost guide</button>
+      <button class="tgl on" id="tglGrid">Grid</button>
+      <div class="tb-sep"></div>
+      <div class="slider-mini">
+        <label for="penRange">PEN</label>
+        <input type="range" id="penRange" min="2" max="16" step="1" value="6">
+      </div>
+      <span id="strokeInfo"></span>
+    </div>
+  </section>
+
+  <!-- craft & preview -->
+  <aside class="panel-side">
+    <div class="side-sec">
+      <h5>SPACING &amp; ALIGNMENT</h5>
+      <div class="ctl">
+        <div class="ctl-row"><label for="spacingRange">Side bearings</label><output id="spacingVal">26</output></div>
+        <input type="range" id="spacingRange" min="0" max="140" step="2" value="26">
+        <small>Room added either side of every glyph — controls how tight or airy the font sets.</small>
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><label for="shiftRange">Baseline offset</label><output id="shiftVal">0</output></div>
+        <input type="range" id="shiftRange" min="-140" max="140" step="2" value="0">
+        <small>Nudge all glyphs up or down if your handwriting sits off the baseline.</small>
+      </div>
+    </div>
+    <div class="side-sec">
+      <h5>LIVE PREVIEW</h5>
+      <input id="previewText" value="Hamburgefonstiv" spellcheck="false" autocomplete="off" aria-label="Preview text">
+      <div class="chips">
+        <button class="chip" data-t="Hamburgefonstiv">Type test</button>
+        <button class="chip" data-t="Sphinx of black quartz, judge my vow!">Pangram</button>
+        <button class="chip" data-t="ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz">Alphabet</button>
+        <button class="chip" data-t="0123456789 &amp; @ # % !?">Numerals</button>
+      </div>
+      <div id="previewOut"></div>
+      <div class="psize"><label for="previewSize">SIZE</label><input type="range" id="previewSize" min="22" max="72" value="34"></div>
+      <div class="live-status"><i class="dot" id="liveDot"></i><span id="liveStatus">No characters drawn yet</span></div>
+    </div>
+    <div class="side-sec">
+      <h5>SHORTCUTS</h5>
+      <div class="shortcuts">
+        <div><span>Undo / Redo</span><span><i class="kbd">Ctrl</i> <i class="kbd">Z</i> <i class="kbd">Y</i></span></div>
+        <div><span>Switch character</span><span><i class="kbd">←</i> <i class="kbd">→</i></span></div>
+        <div><span>Export project</span><span><i class="kbd">Ctrl</i> <i class="kbd">S</i></span></div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<div id="toasts"></div>
+<div id="modalRoot"></div>
+<input type="file" id="fileInput" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* ================= character set & constants ================= */
+const SETS = [
+  {label:'Uppercase', chars:'ABCDEFGHIJKLMNOPQRSTUVWXYZ'},
+  {label:'Lowercase', chars:'abcdefghijklmnopqrstuvwxyz'},
+  {label:'Numerals',  chars:'0123456789'},
+  {label:'Symbols',   chars:".,:;!?\"'-\u2013()[]@&#*+=/%$"},
+];
+const ALL = SETS.flatMap(s=>[...s.chars]);
+const TOTAL = ALL.length;
+const FAMILY = 'FFStudioCustom';      // internal family name for the live @font-face
+const BASELINE_Y = 760;               // logical em-space: writing box is 1000×1000 units
+const LS_KEY = 'fontforge.studio.v1';
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ================= state ================= */
+function freshState(){ return {name:'Untitled Font', spacing:26, shift:0, pen:6, ghost:true, grid:true, glyphs:{} }; }
+let state = freshState();
+let cur = 'A';
+let live = null;          // stroke currently being drawn
+let activeId = null;      // pointer id
+
+function ensureGlyph(ch){
+  if(!state.glyphs[ch]) state.glyphs[ch] = {strokes:[], undo:[], redo:[], ver:0};
+  return state.glyphs[ch];
+}
+function doneCount(){
+  let n=0; for(const ch of ALL) if(state.glyphs[ch] && state.glyphs[ch].strokes.length) n++;
+  return n;
+}
+function firstUndrawn(){
+  for(const ch of ALL) if(!(state.glyphs[ch] && state.glyphs[ch].strokes.length)) return ch;
+  return 'A';
+}
+
+/* ================= persistence ================= */
+let saveTimer=null;
+function markDirty(){ clearTimeout(saveTimer); saveTimer=setTimeout(saveNow,700); }
+function saveNow(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(serialize())); }catch(e){}
+}
+function serialize(){
+  const o={v:1,name:state.name,spacing:state.spacing,shift:state.shift,pen:state.pen,ghost:state.ghost,grid:state.grid,glyphs:{}};
+  for(const ch of ALL){
+    const g=state.glyphs[ch];
+    if(g && g.strokes.length) o.glyphs[ch]={strokes:g.strokes};
+  }
+  return o;
+}
+function applyProject(o){
+  state.name = typeof o.name==='string' && o.name.trim() ? o.name.trim().slice(0,60) : 'Untitled Font';
+  state.spacing = clamp(+o.spacing||0, 0, 140);
+  state.shift   = clamp(+o.shift||0, -140, 140);
+  state.pen     = clamp(+o.pen||6, 2, 16);
+  state.ghost = o.ghost!==false; state.grid = o.grid!==false;
+  state.glyphs = {};
+  if(o.glyphs && typeof o.glyphs==='object'){
+    for(const ch of ALL){
+      const src=o.glyphs[ch];
+      if(!src || !Array.isArray(src.strokes)) continue;
+      const strokes = src.strokes
+        .filter(s=>Array.isArray(s) && s.length && s.every(p=>typeof p.x==='number' && typeof p.y==='number'))
+        .slice(0,300)
+        .map(s=>s.map(p=>({x:+p.x,y:+p.y,w:clamp(+p.w||6,1,80)})));
+      if(strokes.length) state.glyphs[ch]={strokes,undo:[],redo:[],ver:0};
+    }
+  }
+}
+function loadSaved(){
+  try{
+    const raw=localStorage.getItem(LS_KEY);
+    if(!raw) return false;
+    applyProject(JSON.parse(raw));
+    return true;
+  }catch(e){ return false; }
+}
+document.addEventListener('visibilitychange',()=>{ if(document.hidden) saveNow(); });
+
+/* ================= toasts ================= */
+const TIC = '<svg class="tic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"/></svg>';
+function toast(msg, kind){
+  const host=$('#toasts');
+  while(host.children.length>2) host.firstChild.remove();
+  const t=document.createElement('div');
+  t.className='toast'+(kind?' '+kind:'');
+  t.innerHTML=TIC;
+  const s=document.createElement('span'); s.textContent=msg; t.appendChild(s);
+  host.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('in'));
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),350); }, 3400);
+}
+
+/* ================= modal ================= */
+function openModal({title, intro, withName, okText, okClass, cancelText, onOk}){
+  const back=document.createElement('div'); back.className='modal-back';
+  const m=document.createElement('div'); m.className='modal';
+  const h=document.createElement('h3'); h.textContent=title; m.appendChild(h);
+  if(intro){ const p=document.createElement('p'); p.textContent=intro; m.appendChild(p); }
+  let nameInput=null;
+  if(withName){
+    const lab=document.createElement('label'); lab.textContent='FONT NAME'; m.appendChild(lab);
+    nameInput=document.createElement('input');
+    nameInput.value = state.name==='Untitled Font' ? '' : state.name;
+    nameInput.placeholder='e.g. Monday Script';
+    nameInput.maxLength=60;
+    m.appendChild(nameInput);
+    const fp=document.createElement('p'); fp.className='fineprint';
+    fp.textContent='84 characters await — A–Z, a–z, 0–9 and common symbols. Everything autosaves in this browser.';
+    m.appendChild(fp);
+  }
+  const act=document.createElement('div'); act.className='m-actions';
+  if(cancelText){
+    const c=document.createElement('button'); c.className='btn'; c.textContent=cancelText;
+    c.onclick=()=>close(); act.appendChild(c);
+  }
+  const ok=document.createElement('button'); ok.className='btn '+(okClass||'primary'); ok.textContent=okText;
+  ok.onclick=()=>{ const n = nameInput ? nameInput.value.trim() : null; if(onOk(n)!==false) close(); };
+  act.appendChild(ok); m.appendChild(act); back.appendChild(m);
+  $('#modalRoot').appendChild(back);
+  function close(){ back.remove(); document.removeEventListener('keydown',onKey); }
+  function onKey(e){ if(e.key==='Escape') close(); }
+  back.addEventListener('pointerdown',e=>{ if(e.target===back) close(); });
+  document.addEventListener('keydown',onKey);
+  if(nameInput){ nameInput.focus(); nameInput.addEventListener('keydown',e=>{ if(e.key==='Enter') ok.click(); }); }
+}
+
+/* ================= writing canvas ================= */
+const pad=$('#pad'), pctx=pad.getContext('2d'), wrap=$('#canvasWrap'), hintEl=$('#hint');
+let cssSize=520, dpr=1;
+
+function resizePad(){
+  const r=wrap.getBoundingClientRect();
+  const size=Math.round(Math.max(220, Math.min(r.width, r.height, 700)));
+  const ndpr=window.devicePixelRatio||1;
+  if(size===cssSize && ndpr===dpr && pad.width) return;
+  cssSize=size; dpr=ndpr;
+  pad.style.width=pad.style.height=size+'px';
+  pad.width=pad.height=Math.round(size*dpr);
+  renderPad();
+}
+new ResizeObserver(resizePad).observe(wrap);
+
+function paintStroke(g, pts, u){
+  if(!pts.length) return;
+  g.fillStyle=g.strokeStyle='#262219';
+  if(pts.length===1){
+    g.beginPath(); g.arc(pts[0].x*u, pts[0].y*u, Math.max(1,pts[0].w/2*u), 0, 6.29); g.fill(); return;
+  }
+  g.lineCap='round'; g.lineJoin='round';
+  for(let i=1;i<pts.length;i++){
+    const a=pts[i-1], b=pts[i];
+    g.lineWidth=Math.max(1,(a.w+b.w)/2*u);
+    g.beginPath(); g.moveTo(a.x*u,a.y*u); g.lineTo(b.x*u,b.y*u); g.stroke();
+  }
+}
+
+function renderPad(){
+  const g=pctx, S=cssSize, u=S/1000;
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,S,S);
+  if(state.grid){
+    g.fillStyle='#ECE6D5';
+    const rr=Math.max(.7,u);
+    for(let x=50;x<1000;x+=50) for(let y=50;y<1000;y+=50){
+      g.beginPath(); g.arc(x*u,y*u,rr,0,6.29); g.fill();
+    }
+  }
+  // typographic guides
+  const guide=(ly,label,dashed,strong)=>{
+    g.strokeStyle= strong ? '#B2A78B' : '#D8D0B9';
+    g.lineWidth=1;
+    g.setLineDash(dashed?[5,5]:[]);
+    g.beginPath(); g.moveTo(0,ly*u); g.lineTo(S,ly*u); g.stroke();
+    g.setLineDash([]);
+    if(label){
+      g.fillStyle= strong ? '#9C9070' : '#BCB298';
+      g.font='500 10px Archivo'; g.textAlign='left'; g.textBaseline='alphabetic';
+      g.fillText(label, 7, ly*u-5);
+    }
+  };
+  guide(100,'cap',1,0); guide(280,'x',1,0); guide(760,'baseline',0,1); guide(1000,'desc',1,0);
+  // ghost reference letter
+  if(state.ghost){
+    g.fillStyle='#E0D9C6';
+    g.textAlign='center'; g.textBaseline='alphabetic';
+    g.font=`${Math.round(930*u)}px Archivo`;
+    g.fillText(cur, 500*u, 760*u);
+  }
+  // committed + in-progress strokes
+  const gl=state.glyphs[cur];
+  if(gl) for(const s of gl.strokes) paintStroke(g,s,u);
+  if(live) paintStroke(g,live.pts,u);
+}
+
+/* --- pointer input: velocity-sensitive pen --- */
+function toLogical(e){
+  const r=pad.getBoundingClientRect();
+  return {
+    x: Math.round(clamp((e.clientX-r.left)/cssSize*1000,-40,1040)*10)/10,
+    y: Math.round(clamp((e.clientY-r.top )/cssSize*1000,-40,1040)*10)/10,
+    t: e.timeStamp
+  };
+}
+function addPoint(e){
+  const p=toLogical(e), pts=live.pts, last=pts[pts.length-1];
+  const base=state.pen*1000/cssSize;   // screen px → em units
+  let w=live.lastW;
+  if(last){
+    const d=Math.hypot(p.x-last.x,p.y-last.y);
+    if(d<2.2) return;
+    const dt=Math.max(1,p.t-last.t);
+    const target=base*(0.6+0.85*Math.exp(-(d/dt)*0.55));  // slow = fuller, fast = finer
+    w=clamp(live.lastW+(target-live.lastW)*0.28, 1.4, base*1.45);
+  }
+  live.lastW=w;
+  pts.push({x:p.x, y:p.y, w:Math.round(w*100)/100, t:p.t});
+}
+pad.addEventListener('pointerdown',e=>{
+  if(e.pointerType==='mouse' && e.button!==0) return;
+  if(activeId!==null) return;
+  activeId=e.pointerId;
+  pad.setPointerCapture(e.pointerId);
+  live={pts:[], lastW:state.pen*1000/cssSize};
+  addPoint(e);
+  hintEl.classList.add('off');
+  renderPad();
+});
+pad.addEventListener('pointermove',e=>{
+  if(!live || e.pointerId!==activeId) return;
+  const evs=e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for(const ev of evs) addPoint(ev);
+  renderPad();
+});
+function endStroke(e){
+  if(!live || e.pointerId!==activeId) return;
+  activeId=null;
+  const pts=live.pts; live=null;
+  if(pts.length){
+    if(pts.length>1){  // gentle taper at both ends
+      pts[0].w*=.6; if(pts[1]) pts[1].w*=.82;
+      pts[pts.length-1].w*=.6; if(pts[pts.length-2]) pts[pts.length-2].w*=.82;
+    }
+    const g=ensureGlyph(cur);
+    g.undo.push(JSON.stringify(g.strokes));
+    if(g.undo.length>60) g.undo.shift();
+    g.redo.length=0;
+    g.strokes.push(pts);
+    g.ver++;
+    onEdited();
+  } else renderPad();
+}
+pad.addEventListener('pointerup',endStroke);
+pad.addEventListener('pointercancel',endStroke);
+pad.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ================= vectorization pipeline ================= */
+/* 1) rasterize strokes at 4× and average down to a 91×91 coverage grid
+   2) heal diagonal-only connections so thin strokes never break
+   3) marching squares at 0.5 → directed segments → closed loops
+   4) Chaikin smoothing ×2 + Ramer–Douglas–Peucker simplification
+   5) map into em units, trim to ink bbox, add side bearings        */
+const N=91, CELL=1000/(N-1);
+
+function coverageGrid(strokes){
+  const R=4, S=N*R;
+  const cv=document.createElement('canvas'); cv.width=cv.height=S;
+  const c=cv.getContext('2d',{willReadFrequently:true});
+  c.scale(S/1000,S/1000);
+  c.fillStyle=c.strokeStyle='#000'; c.lineCap='round'; c.lineJoin='round';
+  for(const pts of strokes){
+    if(pts.length===1){
+      c.beginPath(); c.arc(pts[0].x,pts[0].y,Math.max(.6,pts[0].w/2),0,6.29); c.fill(); continue;
+    }
+    for(let i=1;i<pts.length;i++){
+      const a=pts[i-1],b=pts[i];
+      c.lineWidth=Math.max(.6,(a.w+b.w)/2);
+      c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke();
+    }
+  }
+  const d=c.getImageData(0,0,S,S).data;
+  const cov=new Float32Array(N*N);
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){
+    let s=0;
+    for(let dy=0;dy<R;dy++) for(let dx=0;dx<R;dx++)
+      s+=d[(((y*R+dy)*S)+(x*R+dx))*4+3];
+    cov[y*N+x]=s/(R*R)/255;
+  }
+  return cov;
+}
+function healCorners(cov){
+  const T=.5;
+  for(let y=0;y<N-1;y++) for(let x=0;x<N-1;x++){
+    const i=y*N+x;
+    const a=cov[i]>=T, b=cov[i+1]>=T, c=cov[i+N]>=T, d=cov[i+N+1]>=T;
+    if(a&&d&&!b&&!c) cov[cov[i+1]>=cov[i+N] ? i+1 : i+N]=1;
+    else if(b&&c&&!a&&!d) cov[cov[i]>=cov[i+N+1] ? i : i+N+1]=1;
+  }
+}
+function traceContours(cov){
+  const T=.5, segs=[];
+  const mid={ t:(x,y)=>[x+.5,y], r:(x,y)=>[x+1,y+.5], b:(x,y)=>[x+.5,y+1], l:(x,y)=>[x,y+.5] };
+  for(let y=0;y<N-1;y++) for(let x=0;x<N-1;x++){
+    const tl=cov[y*N+x]>=T?1:0, tr=cov[y*N+x+1]>=T?1:0,
+          br=cov[(y+1)*N+x+1]>=T?1:0, bl=cov[(y+1)*N+x]>=T?1:0;
+    const c=(tl<<3)|(tr<<2)|(br<<1)|bl;
+    const t=mid.t(x,y), r=mid.r(x,y), b=mid.b(x,y), l=mid.l(x,y);
+    switch(c){
+      case 1:  segs.push([b,l]); break;
+      case 2:  segs.push([r,b]); break;
+      case 3:  segs.push([r,l]); break;
+      case 4:  segs.push([t,r]); break;
+      case 5:  segs.push([t,r],[b,l]); break;
+      case 6:  segs.push([t,b]); break;
+      case 7:  segs.push([t,l]); break;
+      case 8:  segs.push([l,t]); break;
+      case 9:  segs.push([b,t]); break;
+      case 10: segs.push([l,t],[r,b]); break;
+      case 11: segs.push([r,t]); break;
+      case 12: segs.push([l,r]); break;
+      case 13: segs.push([b,r]); break;
+      case 14: segs.push([l,b]); break;
+    }
+  }
+  // chain directed segments (each crossing point has one in / one out)
+  const key=p=>p[0]+':'+p[1];
+  const starts=new Map();
+  segs.forEach((s,i)=>{
+    const k=key(s[0]);
+    const arr=starts.get(k);
+    if(arr) arr.push(i); else starts.set(k,[i]);
+  });
+  const used=new Uint8Array(segs.length), loops=[];
+  for(let i=0;i<segs.length;i++){
+    if(used[i]) continue;
+    used[i]=1;
+    const loop=[segs[i][0]];
+    let p=segs[i][1];
+    const sk=key(segs[i][0]);
+    let guard=segs.length+2;
+    while(guard-->0){
+      loop.push(p);
+      if(key(p)===sk) break;
+      const cand=starts.get(key(p));
+      let nx=-1;
+      if(cand) for(const ci of cand) if(!used[ci]){ nx=ci; break; }
+      if(nx<0) break;
+      used[nx]=1; p=segs[nx][1];
+    }
+    if(loop.length>2) loops.push(loop);
+  }
+  return loops;
+}
+function chaikin(p){
+  const o=[];
+  for(let i=0;i<p.length;i++){
+    const a=p[i], b=p[(i+1)%p.length];
+    o.push({x:a.x*.75+b.x*.25, y:a.y*.75+b.y*.25},
+           {x:a.x*.25+b.x*.75, y:a.y*.25+b.y*.75});
+  }
+  return o;
+}
+function segDist(p,a,b){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const L2=dx*dx+dy*dy;
+  if(!L2) return Math.hypot(p.x-a.x,p.y-a.y);
+  const t=clamp(((p.x-a.x)*dx+(p.y-a.y)*dy)/L2,0,1);
+  return Math.hypot(p.x-(a.x+t*dx), p.y-(a.y+t*dy));
+}
+function rdp(pts,eps){
+  if(pts.length<3) return pts.slice();
+  let mi=0, md=-1;
+  const a=pts[0], b=pts[pts.length-1];
+  for(let i=1;i<pts.length-1;i++){
+    const d=segDist(pts[i],a,b);
+    if(d>md){ md=d; mi=i; }
+  }
+  if(md>eps){
+    const l=rdp(pts.slice(0,mi+1),eps), r=rdp(pts.slice(mi),eps);
+    return l.slice(0,-1).concat(r);
+  }
+  return [a,b];
+}
+function rdpClosed(pts,eps){
+  if(pts.length<5) return pts;
+  const keep=rdp(pts.concat([pts[0]]),eps);
+  keep.pop();
+  return keep;
+}
+function polyArea(p){
+  let s=0;
+  for(let i=0;i<p.length;i++){
+    const a=p[i], b=p[(i+1)%p.length];
+    s+=a.x*b.y-b.x*a.y;
+  }
+  return s/2;
+}
+
+const traceCache=new Map();
+function glyphTrace(ch){
+  const g=state.glyphs[ch];
+  if(!g || !g.strokes.length) return null;
+  let c=traceCache.get(ch);
+  if(c && c.ver===g.ver) return c;
+  const cov=coverageGrid(g.strokes);
+  healCorners(cov);
+  const polys=[];
+  for(const lp of traceContours(cov)){
+    let pts=lp.map(p=>({x:p[0]*CELL, y:p[1]*CELL}));
+    pts=chaikin(chaikin(pts));
+    pts=rdpClosed(pts,2.6);
+    if(pts.length>=3 && Math.abs(polyArea(pts))>12) polys.push(pts);
+  }
+  c={ver:g.ver, polys, bb:null};
+  if(polys.length){
+    let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+    for(const p of polys) for(const q of p){
+      if(q.x<minX)minX=q.x; if(q.x>maxX)maxX=q.x;
+      if(q.y<minY)minY=q.y; if(q.y>maxY)maxY=q.y;
+    }
+    c.bb={minX,minY,maxX,maxY};
+  }
+  traceCache.set(ch,c);
+  return c;
+}
+function glyphOutline(ch){
+  const t=glyphTrace(ch);
+  if(!t || !t.polys.length || !window.opentype) return null;
+  const path=new opentype.Path(), sp=state.spacing, sh=state.shift;
+  for(const poly of t.polys){
+    path.moveTo(poly[0].x-t.bb.minX+sp, BASELINE_Y-poly[0].y+sh);
+    for(let i=1;i<poly.length;i++)
+      path.lineTo(poly[i].x-t.bb.minX+sp, BASELINE_Y-poly[i].y+sh);
+    path.close();
+  }
+  return { path, advance: Math.max(150,(t.bb.maxX-t.bb.minX)+sp*2) };
+}
+
+/* ================= font build / live preview / download ================= */
+function buildFont(){
+  const glyphs=[ new opentype.Glyph({name:'.notdef', unicode:0, advanceWidth:500}) ];
+  glyphs.push(new opentype.Glyph({name:'space', unicode:32, advanceWidth:300+state.spacing}));
+  let n=0;
+  for(const ch of ALL){
+    const o=glyphOutline(ch);
+    if(!o) continue;
+    glyphs.push(new opentype.Glyph({
+      name:'uni'+ch.codePointAt(0).toString(16).toUpperCase().padStart(4,'0'),
+      unicode:ch.codePointAt(0), advanceWidth:o.advance, path:o.path
+    }));
+    n++;
+  }
+  const font=new opentype.Font({
+    familyName: state.name.trim()||'Untitled Font', styleName:'Regular',
+    unitsPerEm:1000, ascender:800, descender:-200, glyphs
+  });
+  return {font, count:n};
+}
+
+let face=null, regenTimer=null;
+function setLiveStatus(s,n){
+  const dot=$('#liveDot'), el=$('#liveStatus');
+  dot.className='dot '+s;
+  el.textContent =
+    s==='busy'  ? 'Rendering your font…' :
+    s==='live'  ? `Live — ${n} glyph${n===1?'':'s'} installed` :
+    s==='empty' ? 'No characters drawn yet' :
+    s==='err'   ? 'Font engine unavailable — check connection' : '';
+}
+function scheduleLive(){
+  setLiveStatus('busy');
+  clearTimeout(regenTimer);
+  regenTimer=setTimeout(regenLive,450);
+}
+async function regenLive(){
+  if(!window.opentype){ setLiveStatus('err'); return; }
+  try{
+    const {font,count}=buildFont();
+    const f=new FontFace(FAMILY, font.toArrayBuffer());
+    await f.load();
+    if(face) document.fonts.delete(face);
+    face=f;
+    document.fonts.add(f);
+    setLiveStatus(count?'live':'empty', count);
+  }catch(e){ setLiveStatus('err'); }
+}
+
+function sanitizeName(s){ return (s||'').replace(/[^\w\- ]+/g,'').trim()||'MyFont'; }
+function downloadTTF(){
+  if(!window.opentype){ toast('The font engine could not load — check your connection.','warn'); return; }
+  try{
+    const {font,count}=buildFont();
+    const blob=new Blob([font.toArrayBuffer()],{type:'font/ttf'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=sanitizeName(state.name)+'.ttf';
+    a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    const d=doneCount();
+    toast(d===TOTAL
+      ? `${sanitizeName(state.name)}.ttf is ready — all ${TOTAL} characters included.`
+      : `Downloaded — ${d} of ${TOTAL} characters drawn; undrawn ones will be blank.`, d===TOTAL?'ok':'warn');
+  }catch(e){ toast('Something went wrong while compiling the font.','warn'); }
+}
+
+/* ================= project import / export ================= */
+function exportProject(){
+  const blob=new Blob([JSON.stringify(serialize(),null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=sanitizeName(state.name)+'.fontforge.json';
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  toast('Project exported — keep the .json to continue editing later.','ok');
+}
+ $('#fileInput').addEventListener('change',e=>{
+  const f=e.target.files[0];
+  e.target.value='';
+  if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const o=JSON.parse(r.result);
+      if(!o || typeof o!=='object' || !o.glyphs || typeof o.glyphs!=='object') throw 0;
+      applyProject(o);
+      traceCache.clear();
+      syncUI(); updateAllCells(); updateProgress();
+      setCur(firstUndrawn());
+      scheduleLive(); markDirty();
+      toast(`Project imported — ${doneCount()} characters restored.`,'ok');
+    }catch(err){ toast('That file is not a valid FontForge project.','warn'); }
+  };
+  r.readAsText(f);
+});
+
+/* ================= character grid UI ================= */
+const cellMap=new Map();
+function buildGrid(){
+  const host=$('#charGrid');
+  for(const set of SETS){
+    const h=document.createElement('h5'); h.textContent=set.label.toUpperCase(); host.appendChild(h);
+    const grid=document.createElement('div'); grid.className='cgrid';
+    for(const ch of set.chars){
+      const cell=document.createElement('button');
+      cell.className='cell'; cell.dataset.ch=ch; cell.title=`${ch} — ${set.label}`;
+      const cv=document.createElement('canvas'); cv.width=cv.height=96;
+      const ref=document.createElement('span'); ref.className='ref'; ref.textContent=ch;
+      cell.append(cv,ref);
+      grid.appendChild(cell);
+      cellMap.set(ch,cell);
+    }
+    host.appendChild(grid);
+  }
+  host.addEventListener('click',e=>{
+    const b=e.target.closest('.cell');
+    if(b) setCur(b.dataset.ch);
+  });
+}
+function drawThumb(cv,strokes){
+  const c=cv.getContext('2d'), s=cv.width;
+  c.clearRect(0,0,s,s);
+  let minX=1e9,minY=1e9,maxX=-1e9,maxY=-1e9;
+  for(const st of strokes) for(const p of st){
+    const r=p.w/2;
+    if(p.x-r<minX)minX=p.x-r; if(p.x+r>maxX)maxX=p.x+r;
+    if(p.y-r<minY)minY=p.y-r; if(p.y+r>maxY)maxY=p.y+r;
+  }
+  const w=Math.max(maxX-minX,1), h=Math.max(maxY-minY,1), pad=s*.15;
+  const k=Math.min((s-2*pad)/w,(s-2*pad)/h);
+  const ox=(s-w*k)/2-minX*k, oy=(s-h*k)/2-minY*k;
+  c.fillStyle=c.strokeStyle='#2A251C'; c.lineCap='round'; c.lineJoin='round';
+  for(const st of strokes){
+    if(st.length===1){
+      c.beginPath(); c.arc(st[0].x*k+ox, st[0].y*k+oy, Math.max(1,st[0].w/2*k), 0, 6.29); c.fill(); continue;
+    }
+    for(let i=1;i<st.length;i++){
+      const a=st[i-1], b=st[i];
+      c.lineWidth=Math.max(1,(a.w+b.w)/2*k);
+      c.beginPath(); c.moveTo(a.x*k+ox,a.y*k+oy); c.lineTo(b.x*k+ox,b.y*k+oy); c.stroke();
+    }
+  }
+}
+function updateCell(ch){
+  const cell=cellMap.get(ch); if(!cell) return;
+  const g=state.glyphs[ch];
+  const done=!!(g && g.strokes.length);
+  cell.classList.toggle('done',done);
+  if(done) drawThumb(cell.querySelector('canvas'),g.strokes);
+}
+function updateAllCells(){ for(const ch of ALL) updateCell(ch); }
+
+/* ================= progress & stage ================= */
+let celebrated=false;
+function updateProgress(){
+  const d=doneCount(), f=d/TOTAL;
+  $('#ringFill').style.strokeDashoffset=(65.97*(1-f)).toFixed(2);
+  $('#progressLabel').textContent=`${d} / ${TOTAL}`;
+  $('#charCount').textContent=`${d} drawn · ${TOTAL-d} to go`;
+  $('#progressBarFill').style.width=(f*100).toFixed(1)+'%';
+  $('#btnDownload').classList.toggle('complete',d===TOTAL);
+  if(d===TOTAL && !celebrated){
+    celebrated=true;
+    toast(`All ${TOTAL} characters drawn — ${state.name} is ready to download.`,'ok');
+  }
+  if(d<TOTAL) celebrated=false;
+}
+function updateStage(){
+  const g=state.glyphs[cur];
+  const n=g?g.strokes.length:0;
+  $('#glyphCard').textContent=cur;
+  $('#glyphCard').classList.toggle('done',n>0);
+  const set=SETS.find(s=>s.chars.includes(cur));
+  $('#glyphSet').textContent=`${set.label} · ${cur}`;
+  $('#glyphState').textContent=n?`Drawn — ${n} stroke${n===1?'':'s'}`:'Not started yet';
+  $('#nextChar').textContent=ALL[(ALL.indexOf(cur)+1)%ALL.length];
+  $('#strokeInfo').textContent=n?`${n} stroke${n===1?'':'s'} on canvas`:'';
+  hintEl.classList.toggle('off', n>0 || !!live);
+}
+function syncHistoryBtns(){
+  const g=state.glyphs[cur];
+  $('#btnUndo').disabled=!(g&&g.undo.length);
+  $('#btnRedo').disabled=!(g&&g.redo.length);
+}
+function setCur(ch){
+  cur=ch;
+  for(const [c,el] of cellMap) el.classList.toggle('active',c===ch);
+  const el=cellMap.get(ch);
+  if(el) el.scrollIntoView({block:'nearest',inline:'nearest'});
+  updateStage(); syncHistoryBtns(); renderPad();
+}
+function nav(d){ setCur(ALL[(ALL.indexOf(cur)+d+ALL.length)%ALL.length]); }
+
+function onEdited(){
+  updateCell(cur); updateProgress(); updateStage();
+  syncHistoryBtns(); renderPad();
+  scheduleLive(); markDirty();
+}
+
+/* ================= history ================= */
+function snapshotUndo(g){ g.undo.push(JSON.stringify(g.strokes)); if(g.undo.length>60) g.undo.shift(); g.redo.length=0; }
+function undo(){
+  const g=state.glyphs[cur];
+  if(!g || !g.undo.length) return;
+  g.redo.push(JSON.stringify(g.strokes));
+  g.strokes=JSON.parse(g.undo.pop());
+  g.ver++;
+  onEdited();
+}
+function redo(){
+  const g=state.glyphs[cur];
+  if(!g || !g.redo.length) return;
+  g.undo.push(JSON.stringify(g.strokes));
+  g.strokes=JSON.parse(g.redo.pop());
+  g.ver++;
+  onEdited();
+}
+function clearGlyph(){
+  const g=ensureGlyph(cur);
+  if(!g.strokes.length) return;
+  snapshotUndo(g);
+  g.strokes=[];
+  g.ver++;
+  toast(`Cleared “${cur}” — Ctrl+Z brings it back.`);
+  onEdited();
+}
+
+/* ================= UI wiring ================= */
+function syncUI(){
+  $('#fontName').value=state.name;
+  $('#spacingRange').value=state.spacing; $('#spacingVal').textContent=state.spacing;
+  $('#shiftRange').value=state.shift;     $('#shiftVal').textContent=state.shift;
+  $('#penRange').value=state.pen;
+  $('#tglGhost').classList.toggle('on',state.ghost);
+  $('#tglGrid').classList.toggle('on',state.grid);
+  document.documentElement.style.setProperty('--x',''); // no-op keeps linter calm
+}
+ $('#fontName').addEventListener('input',e=>{ state.name=e.target.value.slice(0,60); markDirty(); });
+ $('#btnUndo').addEventListener('click',undo);
+ $('#btnRedo').addEventListener('click',redo);
+ $('#btnClear').addEventListener('click',clearGlyph);
+ $('#btnPrev').addEventListener('click',()=>nav(-1));
+ $('#btnNext').addEventListener('click',()=>nav(1));
+ $('#btnDownload').addEventListener('click',downloadTTF);
+ $('#btnExport').addEventListener('click',exportProject);
+ $('#btnImport').addEventListener('click',()=>$('#fileInput').click());
+ $('#btnNew').addEventListener('click',()=>{
+  openModal({
+    title:'Start a new font?',
+    intro:'This clears the drawing board. Export your project first if you want to keep the current one.',
+    withName:true, okText:'Start fresh', cancelText:'Keep editing',
+    onOk(name){
+      state=freshState();
+      if(name) state.name=name;
+      traceCache.clear();
+      syncUI(); updateAllCells(); updateProgress();
+      setCur('A'); scheduleLive(); markDirty();
+      toast('A blank typeface awaits its first stroke.');
+    }
+  });
+});
+ $('#tglGhost').addEventListener('click',e=>{ state.ghost=!state.ghost; e.currentTarget.classList.toggle('on',state.ghost); renderPad(); markDirty(); });
+ $('#tglGrid').addEventListener('click',e=>{ state.grid=!state.grid; e.currentTarget.classList.toggle('on',state.grid); renderPad(); markDirty(); });
+ $('#penRange').addEventListener('input',e=>{ state.pen=+e.target.value; markDirty(); });
+ $('#spacingRange').addEventListener('input',e=>{
+  state.spacing=+e.target.value; $('#spacingVal').textContent=state.spacing;
+  scheduleLive(); markDirty();
+});
+ $('#shiftRange').addEventListener('input',e=>{
+  state.shift=+e.target.value; $('#shiftVal').textContent=state.shift;
+  scheduleLive(); markDirty();
+});
+const previewOut=$('#previewOut');
+ $('#previewText').addEventListener('input',e=>{ previewOut.textContent=e.target.value; });
+document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{
+  const t=c.dataset.t.replace(/\s*&\s*/,' & ');
+  $('#previewText').value=t; previewOut.textContent=t;
+}));
+previewOut.textContent=$('#previewText').value;
+ $('#previewSize').addEventListener('input',e=>{ previewOut.style.fontSize=e.target.value+'px'; });
+
+document.addEventListener('keydown',e=>{
+  const t=e.target, typing=t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable;
+  const mod=e.ctrlKey||e.metaKey;
+  if(mod && e.key.toLowerCase()==='z'){ if(typing) return; e.preventDefault(); e.shiftKey?redo():undo(); }
+  else if(mod && e.key.toLowerCase()==='y'){ if(typing) return; e.preventDefault(); redo(); }
+  else if(mod && e.key.toLowerCase()==='s'){ e.preventDefault(); exportProject(); }
+  else if(!typing){
+    if(e.key==='ArrowRight'){ e.preventDefault(); nav(1); }
+    else if(e.key==='ArrowLeft'){ e.preventDefault(); nav(-1); }
+  }
+});
+
+/* ================= boot ================= */
+buildGrid();
+const hadProject=loadSaved();
+syncUI();
+updateAllCells();
+updateProgress();
+setCur(hadProject ? firstUndrawn() : 'A');
+if(hadProject){
+  if(doneCount()>0) scheduleLive();
+}else{
+  openModal({
+    title:'Name your typeface',
+    intro:'You are about to draw a complete font — 84 characters, one letterform at a time. Trace the ghost guides or draw freehand; FontForge turns your strokes into a real, installable TTF.',
+    withName:true, okText:'Start with A', okClass:'accent',
+    onOk(name){ if(name) state.name=name; $('#fontName').value=state.name; markDirty(); }
+  });
+}
+document.fonts.ready.then(renderPad);
+</script>
+</body>
+</html>
